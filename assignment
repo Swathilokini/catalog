@@ -1,0 +1,142 @@
+import com.google.gson.Gson;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+public class Main {
+
+    public static void main(String[] args) {
+        try {
+            // Read test cases from JSON file
+            String jsonContent = Files.readString(Paths.get("test_cases.json"));
+            ShamirSecretSharingTestCase[] testCases = new Gson().fromJson(jsonContent, ShamirSecretSharingTestCase[].class);
+
+            List<Integer> secrets = new ArrayList<>();
+            for (ShamirSecretSharingTestCase testCase : testCases) {
+                List<Point> points = extractPoints(testCase.getShares());
+                int secret = findSecret(points);
+                secrets.add(secret);
+            }
+
+            System.out.println("Secrets: " + secrets);
+
+        } catch (IOException e) {
+            System.err.println("Error reading test cases file: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("An error occurred: " + e.getMessage());
+        }
+    }
+
+    private static List<Point> extractPoints(Map<String, Share> shares) {
+        List<Point> points = new ArrayList<>();
+        for (Map.Entry<String, Share> entry : shares.entrySet()) {
+            int x = Integer.parseInt(entry.getKey());
+            int y = decodeYValue(entry.getValue().getBase(), entry.getValue().getValue());
+            points.add(new Point(x, y));
+        }
+        return points;
+    }
+
+    private static int decodeYValue(String base, String value) {
+        int baseInt = Integer.parseInt(base);
+        return Integer.parseInt(value, baseInt);
+    }
+
+    private static int findSecret(List<Point> points) {
+        int n = points.size();
+        double[][] matrix = new double[n][n];
+        double[] yValues = new double[n];
+
+        for (int i = 0; i < n; i++) {
+            Point point = points.get(i);
+            yValues[i] = point.y;
+            for (int j = 0; j < n; j++) {
+                matrix[i][j] = Math.pow(point.x, j);
+            }
+        }
+
+        // Solve the system of equations using Gaussian elimination
+        double[] coefficients = solveLinearSystem(matrix, yValues);
+
+        return (int) coefficients[0]; // Return the constant term (secret)
+    }
+
+    // Gaussian elimination with partial pivoting
+    private static double[] solveLinearSystem(double[][] matrix, double[] yValues) {
+        int n = matrix.length;
+        for (int i = 0; i < n; i++) {
+            // Find pivot row
+            int pivotRow = i;
+            for (int j = i + 1; j < n; j++) {
+                if (Math.abs(matrix[j][i]) > Math.abs(matrix[pivotRow][i])) {
+                    pivotRow = j;
+                }
+            }
+
+            // Swap rows
+            if (pivotRow != i) {
+                double[] tempRow = matrix[i];
+                matrix[i] = matrix[pivotRow];
+                matrix[pivotRow] = tempRow;
+                double tempY = yValues[i];
+                yValues[i] = yValues[pivotRow];
+                yValues[pivotRow] = tempY;
+            }
+
+            // Make diagonal element 1
+            double pivot = matrix[i][i];
+            for (int j = i; j < n; j++) {
+                matrix[i][j] /= pivot;
+            }
+            yValues[i] /= pivot;
+
+            // Eliminate other rows
+            for (int j = 0; j < n; j++) {
+                if (j != i) {
+                    double factor = matrix[j][i];
+                    for (int k = i; k < n; k++) {
+                        matrix[j][k] -= factor * matrix[i][k]; 
+                    }
+                    yValues[j] -= factor * yValues[i];
+                }
+            }
+        }
+
+        return yValues;
+    }
+
+    static class Point {
+        int x;
+        int y;
+
+        public Point(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    static class Share {
+        String base;
+        String value;
+
+        public String getBase() {
+            return base;
+        }
+
+        public String getValue() {
+            return value;
+        }
+    }
+
+    static class ShamirSecretSharingTestCase {
+        Map<String, Share> shares;
+
+        public Map<String, Share> getShares() {
+            return shares;
+        }
+    }
+}
